@@ -4,11 +4,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	coreType "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/fields"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
@@ -23,7 +24,7 @@ type KubeInterface interface {
 }
 
 type K8sutilInterface struct {
-	Kclient    KubeInterface
+	Kclient    *kubernetes.Clientset
 	MasterHost string
 }
 
@@ -44,7 +45,7 @@ func New(kubeCfgFile, masterHost string) (*K8sutilInterface, error) {
 	return k, nil
 }
 
-func newKubeClient(kubeCfgFile string) (KubeInterface, error) {
+func newKubeClient(kubeCfgFile string) (*kubernetes.Clientset, error) {
 
 	var client *kubernetes.Clientset
 
@@ -83,7 +84,7 @@ func newKubeClient(kubeCfgFile string) (KubeInterface, error) {
 
 // GetNamespaces returns all namespaces
 func (k *K8sutilInterface) GetNamespaces() (*v1.NamespaceList, error) {
-	namespaces, err := k.Kclient.Namespaces().List(v1.ListOptions{})
+	namespaces, err := k.Kclient.CoreV1().Namespaces().List(metav1.ListOptions{})
 	if err != nil {
 		logrus.Error("Error getting namespaces: ", err)
 		return nil, err
@@ -94,7 +95,7 @@ func (k *K8sutilInterface) GetNamespaces() (*v1.NamespaceList, error) {
 
 // GetSecret get a secret
 func (k *K8sutilInterface) GetSecret(namespace, secretname string) (*v1.Secret, error) {
-	secret, err := k.Kclient.Secrets(namespace).Get(secretname)
+	secret, err := k.Kclient.CoreV1().Secrets(namespace).Get(secretname, metav1.GetOptions{})
 	if err != nil {
 		logrus.Error("Error getting secret: ", err)
 		return nil, err
@@ -105,7 +106,7 @@ func (k *K8sutilInterface) GetSecret(namespace, secretname string) (*v1.Secret, 
 
 // CreateSecret creates a secret
 func (k *K8sutilInterface) CreateSecret(namespace string, secret *v1.Secret) error {
-	_, err := k.Kclient.Secrets(namespace).Create(secret)
+	_, err := k.Kclient.CoreV1().Secrets(namespace).Create(secret)
 
 	if err != nil {
 		logrus.Error("Error creating secret: ", err)
@@ -117,7 +118,7 @@ func (k *K8sutilInterface) CreateSecret(namespace string, secret *v1.Secret) err
 
 // UpdateSecret updates a secret
 func (k *K8sutilInterface) UpdateSecret(namespace string, secret *v1.Secret) error {
-	_, err := k.Kclient.Secrets(namespace).Update(secret)
+	_, err := k.Kclient.CoreV1().Secrets(namespace).Update(secret)
 
 	if err != nil {
 		logrus.Error("Error updating secret: ", err)
@@ -129,7 +130,7 @@ func (k *K8sutilInterface) UpdateSecret(namespace string, secret *v1.Secret) err
 
 // GetServiceAccount updates a secret
 func (k *K8sutilInterface) GetServiceAccount(namespace, name string) (*v1.ServiceAccount, error) {
-	sa, err := k.Kclient.ServiceAccounts(namespace).Get(name)
+	sa, err := k.Kclient.CoreV1().ServiceAccounts(namespace).Get(name, metav1.GetOptions{})
 
 	if err != nil {
 		logrus.Error("Error getting service account: ", err)
@@ -141,7 +142,7 @@ func (k *K8sutilInterface) GetServiceAccount(namespace, name string) (*v1.Servic
 
 // UpdateServiceAccount updates a secret
 func (k *K8sutilInterface) UpdateServiceAccount(namespace string, sa *v1.ServiceAccount) error {
-	_, err := k.Kclient.ServiceAccounts(namespace).Update(sa)
+	_, err := k.Kclient.CoreV1().ServiceAccounts(namespace).Update(sa)
 
 	if err != nil {
 		logrus.Error("Error updating service account: ", err)
@@ -154,7 +155,7 @@ func (k *K8sutilInterface) UpdateServiceAccount(namespace string, sa *v1.Service
 func (k *K8sutilInterface) WatchNamespaces(resyncPeriod time.Duration, handler func(*v1.Namespace) error) {
 	stopC := make(chan struct{})
 	_, c := cache.NewInformer(
-		cache.NewListWatchFromClient(k.Kclient.Core().RESTClient(), "namespaces", v1.NamespaceAll, fields.Everything()),
+		cache.NewListWatchFromClient(k.Kclient.CoreV1().RESTClient(), "namespaces", v1.NamespaceAll, fields.Everything()),
 		&v1.Namespace{},
 		resyncPeriod,
 		cache.ResourceEventHandlerFuncs{
